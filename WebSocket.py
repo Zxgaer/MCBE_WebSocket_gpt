@@ -1,13 +1,17 @@
 import asyncio
 import json
 import websockets
+import gettext
 from gptapi import GPTAPIConversation
-
+# 语言设置
+LANG = "zh_CN"
+lang = gettext.translation("mcgpt","locale",languages=[LANG])
+lang.install()
 # 请修改此处"API_URL"和"API_KEY"
 api_url = "API_URL" # API地址 #例：https://chat.openai.com/v1/chat/completions
 api_key = "API_KEY"  # 硬编码api用于本地测试
 model = "gpt-4" # gpt模型
-system_prompt = "请始终保持积极和专业的态度。回答尽量保持一段话不要太长，适当添加换行符" # 系统提示词
+system_prompt = _("Please maintain a positive and professional attitude at all times. Try to keep your answers to one paragraph and not too long, adding line breaks as appropriate") # 系统提示词
 
 
 # 上下文（临时）
@@ -16,13 +20,8 @@ enable_history = False # 默认关闭
 #WebSocket
 ip = "localhost" # 如需配置服务器请修改ip
 port = "8080" # 端口
-welcome_message = f"""
-成功连接WebSocket服务器
-服务器ip:{ip}
-端口:{port}
-GPT上下文:{enable_history}
-"""
-
+wlo = "Connect to the WebSocket Server successfully\nServer IP: {ip}\nPort: {port}\nGPT Context: {enable_history}"
+welcome_message = _(wlo).format(ip=ip,port=port,enable_history=enable_history)
 #初始化conversation变量
 conversation = None
 
@@ -34,8 +33,8 @@ async def gpt_main(player_prompt):
     # 发送提示到GPT并获取回复
     gpt_message = await conversation.call_gpt_and_send(player_prompt)
     if gpt_message is None:
-        gpt_message = '错误: GPT回复为None'
-    print(f"gpt消息: {gpt_message}")
+        gpt_message = _("Error: GPT response is None")
+    print(_("gpt message: ") + gpt_message)
 
     if not enable_history:
         await conversation.close()
@@ -90,28 +89,28 @@ async def handle_player_message(websocket, data):
     message = data['body']['message']
     
     if sender and message:
-        print(f"玩家{sender}说: {message}")
-        if message.startswith("GPT 聊天"):
-            prompt = message[len("GPT 聊天 "):]
+        print(_("Player {sender} says: {message}").format(sender=sender,message=message))
+        if message.startswith(_("GPT chat")):
+            prompt = message[len(_("GPT chat")+" "):]
             gpt_message = await gpt_main(prompt)  # 使用 await 调用异步函数
             # 分割消息为长度不超过50的多个部分
             message_parts = [gpt_message[i:i+50] for i in range(0, len(gpt_message), 50)]
             for part in message_parts:
                 print(part)
                 await send_game_message(websocket, part)
-        elif message.startswith("GPT 保存"):
+        elif message.startswith(_("GPT save")):
             await conversation.save_conversation()
             await conversation.close()
             conversation = None
-            await send_game_message(websocket, "对话关闭，数据已保存！")
-        elif message.startswith("GPT 上下文"):
-            await send_game_message(websocket, f"GPT上下文状态:{enable_history}")
-            if message[len("GPT 上下文 "):] == "启用":
+            await send_game_message(websocket, _("Conversation closed, and data saved!"))
+        elif message.startswith(_("GPT context")):
+            await send_game_message(websocket, _("GPT Context state:{enable_history}").format(enable_history=enable_history))
+            if message[len(_("GPT context")+" "):] == _("enable"):
                 enable_history = True
-                await send_game_message(websocket, "GPT上下文已启用，注意tokens消耗!")
-            elif message[len("GPT 上下文 "):] == "关闭":
+                await send_game_message(websocket, _("GPT context enabled, watch out for tokens consumption!"))
+            elif message[len(_("GPT chat")+" "):] == _("disable"):
                 enable_history = False
-                await send_game_message(websocket, "GPT上下文已关闭")
+                await send_game_message(websocket, _("GPT context disabled"))
 
 async def handle_event(websocket, data):
     """根据事件类型处理事件"""
@@ -121,7 +120,7 @@ async def handle_event(websocket, data):
         await handle_player_message(websocket, data)
 
 async def handle_connection(websocket, path):
-    print("客户端已连接")
+    print(_("Client Connected"))
     await send_game_message(websocket, welcome_message)
     try:
         await send_data(websocket, {"Result": "true"})
@@ -130,9 +129,9 @@ async def handle_connection(websocket, path):
             data = json.loads(message)
             await handle_event(websocket, data)
     except websockets.exceptions.ConnectionClosed:
-        print("连接已断开")
+        print(_("Connection Closed"))
     finally:
-        print("客户端已断开连接")
+        print(_("Client Disconnected"))
 
 async def main():
     async with websockets.serve(handle_connection, ip, port):
